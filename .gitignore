@@ -22,3 +22,5 @@ local_settings.py
 
 # Ignore any other sensitive or environment-specific files
 *.env
+# Ignore media files (user-uploaded content)
+/media/
