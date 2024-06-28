@@ -15,7 +15,7 @@ venv/
 *.sublime-workspace
 
 # Ignore Django migration files
-**/migrations/
+
 
 # Ignore local settings file
 local_settings.py
