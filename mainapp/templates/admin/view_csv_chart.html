@@ -1,0 +1,285 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Filter and Analysis Event Log</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.3/js/jquery.dataTables.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 60vh;
+            width: 80vw;
+        }
+        .table-container {
+            margin-top: 20px;
+        }
+        .chart-container {
+    position: relative;
+    margin: auto;
+    height: 70vh !important;
+    width: 80vw;
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Advanced Filter and Analysis Event Log</h1>
+
+        <div class="row my-4">
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="EventID" class="form-label">Event ID:</label>
+                    <input type="text" id="EventID" name="EventID" class="form-control">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="EventType" class="form-label">Event Type:</label>
+                    <input type="text" id="EventType" name="EventType" class="form-control">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="SourceName" class="form-label">Source Name:</label>
+                    <input type="text" id="SourceName" name="SourceName" class="form-control">
+                </div>
+            </div>
+        </div>
+
+        <div class="row my-4">
+            <div class="col-md-4">
+                <button id="filterButton" class="btn btn-primary w-100">Filter</button>
+            </div>
+            <div class="col-md-4" style="margin-top: -30px;">
+                <label for="chartType" class="form-label">Chart Type:</label>
+                <select id="chartType" class="form-select">
+                    <option value="bar">Bar</option>
+                    <option value="pie">Pie</option>
+                    <option value="line">Line</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="myChart"></canvas>
+        </div>
+
+        <div class="table-container">
+            <table id="csvTable" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>TimeGenerated</th>
+                        <th>EventID</th>
+                        <th>EventType</th>
+                        <th>SourceName</th>
+                        <th>ComputerName</th>
+                        <th>StringInserts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in csv_data %}
+                        <tr>
+                            <td>{{ row.TimeGenerated }}</td>
+                            <td>{{ row.EventID }}</td>
+                            <td>{{ row.EventType }}</td>
+                            <td>{{ row.SourceName }}</td>
+                            <td>{{ row.ComputerName }}</td>
+                            <td>{{ row.StringInserts }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <nav>
+            <ul class="pagination">
+                <li class="page-item"><a class="page-link" href="#" id="prevPage">Previous</a></li>
+                <li class="page-item"><a class="page-link" href="#" id="nextPage">Next</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            var table = $('#csvTable').DataTable({
+                "serverSide": true,
+                "ajax": loadData,
+                "processing": true,
+                "deferRender": true,
+                "searching": true,
+                "lengthMenu": [[10, 25, 50, 100], [10, 25, 50, 100]],
+                "columns": [
+                    {"data": "TimeGenerated"},
+                    {"data": "EventID"},
+                    {"data": "EventType"},
+                    {"data": "SourceName"},
+                    {"data": "ComputerName"},
+                    {"data": "StringInserts"}
+                ]
+            });
+            var ctx = document.getElementById('myChart').getContext('2d');
+            var currentChartType = 'bar';
+            var chart;
+            var page = 1;
+            var pageSize = 10;
+            var totalRows = 0;
+
+            function createChart(data, chartType) {
+                if (chart) {
+                    chart.destroy();
+                }
+
+                chart = new Chart(ctx, {
+                    type: chartType,
+                    data: {
+                        labels: Object.keys(data),
+                        datasets: [{
+                            label: 'Event ID Counts',
+                            data: Object.values(data),
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.2)',
+                                'rgba(54, 162, 235, 0.2)',
+                                'rgba(255, 206, 86, 0.2)',
+                                'rgba(75, 192, 192, 0.2)',
+                                'rgba(153, 102, 255, 0.2)',
+                                'rgba(255, 159, 64, 0.2)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                        },
+                        hover: {
+                            mode: 'nearest',
+                            intersect: true
+                        },
+                        scales: {
+                            x: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: 'Event IDs'
+                                }
+                            },
+                            y: {
+                                display: true,
+                                title: {
+                                    display: true,
+                                    text: 'Counts'
+                                },
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            function loadData(data, callback, settings) {
+                var eventID = $('#EventID').val();
+                var eventType = $('#EventType').val();
+                var sourceName = $('#SourceName').val();
+                var searchValue = data.search.value;
+                var pageSize = data.length;
+                var page = data.start / pageSize + 1;
+
+                $.ajax({
+                    url: window.location.href,
+                    data: {
+                        EventID: eventID,
+                        EventType: eventType,
+                        SourceName: sourceName,
+                        search: {
+                            value: searchValue
+                        },
+                        length: pageSize,
+                        start: data.start
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        createChart(response.event_counts, currentChartType);
+
+                        callback({
+                            draw: settings.iDraw,
+                            recordsTotal: response.recordsTotal,
+                            recordsFiltered: response.recordsFiltered,
+                            data: response.data
+                        });
+
+                        totalRows = response.recordsTotal;
+                    }
+                });
+            }
+
+            $('#filterButton').click(function() {
+                table.draw();
+            });
+
+            $('#chartType').change(function() {
+                currentChartType = $(this).val();
+                table.draw();
+            });
+
+            $('#prevPage').click(function() {
+                if (page > 1) {
+                    page--;
+                    table.draw();
+                }
+            });
+
+            $('#nextPage').click(function() {
+                if (page * pageSize < totalRows) {
+                    page++;
+                    table.draw();
+                }
+            });
+
+            // Initial load
+            table.draw();
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
