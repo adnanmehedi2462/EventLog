@@ -24,3 +24,5 @@ local_settings.py
 *.env
 # Ignore media files (user-uploaded content)
 /media/
+
+/event_logs/
