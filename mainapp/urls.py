@@ -1,23 +1,15 @@
+
 from django.urls import path
-# from .views import EventLogListCreate
+from .views import EventCSVCreateView, view_csv_content, predict_maintenance, TrainModelView
 
-from django.contrib.auth.models import User
-
-from .views import EventCSVCreateView
-from . import views
 app_name = 'mainapp'
 urlpatterns = [
-    # path('event-logs/', EventLogListCreate.as_view(), name='event-log-list-create'),
-    # path('register/', RegisterView.as_view(), name='register'),
-    # path('login/', LoginView.as_view(), name='login'),
-    # path('upload-csv/', UploadCSVView.as_view(), name='upload_csv'),
     path('eventslog/', EventCSVCreateView.as_view(), name='eventslog-create'),
     path('eventslog/<int:pk>/', EventCSVCreateView.as_view(), name='eventslog-delete'),
-    path('admin/view-csv/<int:eventcsv_id>/', views.view_csv_content, name='admin_view_csv'),
-    path('admin/view-csv/<int:eventcsv_id>/filter/<str:event_id>/', views.view_csv_content, name='admin_view_csv_filtered'),
-    
-
-    
-
-
+    path('admin/view-csv/<int:eventcsv_id>/', view_csv_content, name='admin_view_csv'),
+    path('admin/view-csv/<int:eventcsv_id>/filter/<str:event_id>/', view_csv_content, name='admin_view_csv_filtered'),
+    path('admin/predict/<int:eventcsv_id>/', predict_maintenance, name='predict_maintenance'),
+    path('admin/train/<int:pk>/', TrainModelView.as_view(), name='train_model'),
+    path('train_model/<int:pk>/', TrainModelView.as_view(), name='train_model'),
+    path('api/predict_maintenance/<int:pk>/', predict_maintenance, name='predict_maintenance'),
 ]

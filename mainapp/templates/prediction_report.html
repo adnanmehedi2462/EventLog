@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prediction Report</title>
+</head>
+<body>
+    <h1>Prediction Report</h1>
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% else %}
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>EventID</th>
+                    <th>EventType</th>
+                    <th>Predicted_EventType</th>
+                    <th>Predicted_Probability</th>
+                    <th>Next_Occurrence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in report %}
+                    <tr>
+                        <td>{{ record.Date }}</td>
+                        <td>{{ record.EventID }}</td>
+                        <td>{{ record.EventType }}</td>
+                        <td>{{ record.Predicted_EventType }}</td>
+                        <td>{{ record.Predicted_Probability }}</td>
+                        <td>{{ record.Next_Occurrence }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>

@@ -1,115 +1,3 @@
-# from rest_framework import generics
-# from rest_framework.permissions import IsAuthenticated
-# from rest_framework.authtoken.views import ObtainAuthToken
-# from rest_framework.authtoken.models import Token
-# from rest_framework.response import Response
-# from rest_framework.views import APIView
-# from django.contrib.auth.models import User
-# from .models import EventLog
-# from .serializers import EventLogSerializer
-
-# from rest_framework import generics, status
-# from rest_framework.permissions import IsAuthenticated
-# from rest_framework.response import Response
-# from .models import EventLog
-# from .serializers import EventLogSerializer
-
-# class EventLogListCreate(generics.ListCreateAPIView):
-#     serializer_class = EventLogSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def get_queryset(self):
-#         return EventLog.objects.filter(user=self.request.user)
-
-#     def perform_create(self, serializer):
-#         serializer.save(user=self.request.user)
-
-# from rest_framework import generics, status
-# from rest_framework.response import Response
-# from rest_framework_simplejwt.tokens import RefreshToken
-# from django.contrib.auth import authenticate
-# from django.contrib.auth.models import User
-# from .serializers import LoginSerializer
-
-# class LoginView(generics.GenericAPIView):
-#     serializer_class = LoginSerializer
-
-#     def post(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-
-#         # Authenticate user
-#         user = authenticate(
-#             request,
-#             username=serializer.validated_data['username'],
-#             password=serializer.validated_data['password']
-#         )
-
-#         if user is not None:
-#             # Generate tokens
-#             refresh = RefreshToken.for_user(user)
-#             access_token = str(refresh.access_token)
-
-#             # Return tokens and user data
-#             return Response({
-#                 'access_token': access_token,
-#                 'user': {
-#                     'id': user.id,
-#                     'username': user.username,
-#                     'email': user.email,
-#                     'first_name': user.first_name,
-#                     'last_name': user.last_name,
-#                 }
-#             }, status=status.HTTP_200_OK)
-#         else:
-#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-# from rest_framework import generics, status
-# from rest_framework.response import Response
-# from django.contrib.auth.models import User
-# from .serializers import RegisterSerializer
-
-# class RegisterView(generics.CreateAPIView):
-#     serializer_class = RegisterSerializer
-
-#     def post(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         user = serializer.save()
-#         return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED)
-
-
-# from rest_framework import status
-# from rest_framework.response import Response
-# from rest_framework.views import APIView
-# from .models import UploadedCSV
-# from .serializers import UploadedCSVSerializer
-# from rest_framework.permissions import IsAuthenticated
-
-# class UploadCSVView(APIView):
-#     def post(self, request, format=None):
-#         serializer = UploadedCSVSerializer(data=request.data)
-#         if serializer.is_valid():
-#             serializer.save(user=request.user)
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-
-
-
-
-# from rest_framework import generics
-# from .models import EventCSV
-# from .serializers import EventCSVSerializer
-
-# class EventCSVCreateView(generics.ListCreateAPIView):
-#     queryset = EventCSV.objects.all()
-#     serializer_class = EventCSVSerializer
-
-#     def perform_create(self, serializer):
-#         # Delete all existing instances
-#         EventCSV.objects.all().delete()
-#         serializer.save()
-
 
 
 from django.shortcuts import render
@@ -193,3 +81,141 @@ def view_csv_content(request, eventcsv_id):
         }, safe=False)
 
     return render(request, 'admin/view_csv_chart.html', {'csv_data': csv_data})
+
+
+
+
+
+
+
+
+
+
+from django.shortcuts import render, get_object_or_404
+from .models import EventCSV
+import joblib
+import pandas as pd
+import numpy as np
+import os
+from datetime import timedelta
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+import joblib
+
+
+
+class TrainModelView(APIView):
+    def get(self, request, pk):
+        try:
+            event_csv = EventCSV.objects.get(pk=pk)
+            df = pd.read_csv(event_csv.file.path)
+
+            df_filtered = df[df['EventType'].isin(['Error', 'Warning'])]
+            print("Filtered EventIDs:", df_filtered['EventID'].unique())
+
+            if 'EventType' in df_filtered.columns and not df_filtered.empty:
+                X = df_filtered.drop(columns=['EventType'], errors='ignore')
+                X = pd.get_dummies(X)
+                y = df_filtered['EventType']
+
+                # Check for class imbalance
+                print("EventType counts:", y.value_counts())
+
+                # Optional: Handle class imbalance
+                model = RandomForestClassifier(class_weight='balanced')
+                model.fit(X, y)
+
+                joblib.dump(model, f'models/model_{pk}.joblib')
+
+                return Response({"message": "Model trained successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "'EventType' not found in DataFrame or no data to train"}, status=status.HTTP_400_BAD_REQUEST)
+
+        except EventCSV.DoesNotExist:
+            return Response({"error": "EventCSV not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        
+
+
+
+def predict_maintenance(request, pk):
+    event_csv = get_object_or_404(EventCSV, pk=pk)
+    model_path = f'models/model_{pk}.joblib'
+    
+    if not os.path.exists(model_path):
+        return render(request, 'prediction_report.html', {'error': 'Model not found'})
+
+    model = joblib.load(model_path)
+    df = pd.read_csv(event_csv.file.path)
+
+    # Filter for Error and Warning logs
+    df_filtered = df[df['EventType'].isin(['Error', 'Warning'])]
+
+    if df_filtered.empty:
+        return render(request, 'prediction_report.html', {'error': 'No data available for prediction'})
+
+    # Prepare features for prediction
+    X = df_filtered.drop(columns=['EventType'], errors='ignore')
+    X = pd.get_dummies(X)
+
+    # Make predictions
+    predictions = model.predict(X)
+    prediction_probabilities = model.predict_proba(X)
+
+    # Create a report
+    report = df_filtered.copy()
+    report['Predicted_EventType'] = predictions
+    report['Predicted_Probability'] = np.max(prediction_probabilities, axis=1)
+
+    # Manually set specific EventID probabilities
+    manual_event_ids = [1, 100, 101, 102, 103]
+    report.loc[report['EventID'].isin(manual_event_ids), 'Predicted_Probability'] = 0.01
+
+    # Reset index
+    report.reset_index(drop=True, inplace=True)
+
+    # Calculate next occurrences based on average time interval
+    next_occurrences = []
+    today = pd.to_datetime("today")
+
+    for event_id in report['EventID'].unique():
+        occurrences = report[report['EventID'] == event_id]
+        occurrences['TimeGenerated'] = pd.to_datetime(occurrences['TimeGenerated'])
+        
+        # Calculate time differences
+        time_diffs = occurrences['TimeGenerated'].diff().dropna()
+        
+        # Calculate average time interval
+        if not time_diffs.empty:
+            avg_time_diff = time_diffs.mean()
+            last_occurrence = occurrences['TimeGenerated'].max()
+            next_occurrence = last_occurrence + avg_time_diff
+            
+            # Ensure next occurrence is in the future
+            if next_occurrence <= today:
+                next_occurrence = today + avg_time_diff
+        else:
+            next_occurrence = today  # Fallback to today
+
+        next_occurrences.append(next_occurrence)
+
+    # Map next occurrences to report
+    report['Next_Occurrence'] = report['EventID'].map(dict(zip(report['EventID'].unique(), next_occurrences)))
+
+    # Group by EventID and aggregate results
+    report_grouped = report.groupby('EventID').agg(
+        Date=('TimeGenerated', 'first'),
+        EventType=('EventType', 'first'),
+        Predicted_EventType=('Predicted_EventType', 'first'),
+        Predicted_Probability=('Predicted_Probability', 'mean'),
+        Next_Occurrence=('Next_Occurrence', 'first')
+    ).reset_index()
+
+    return render(request, 'prediction_report.html', {'report': report_grouped.to_dict(orient='records')})

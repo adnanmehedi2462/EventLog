@@ -1,0 +1,18 @@
+<!-- mainapp/templates/mainapp/train_model_results.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Training Results</title>
+</head>
+<body>
+    <h1>Model Training Results</h1>
+    {% if message %}
+        <p>{{ message }}</p>
+    {% else %}
+        <p>{{ error }}</p>
+    {% endif %}
+    <a href="{% url 'admin:index' %}">Back to Admin</a>
+</body>
+</html>

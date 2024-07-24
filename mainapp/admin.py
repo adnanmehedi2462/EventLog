@@ -52,8 +52,25 @@ from django.utils.html import format_html
 from django.urls import reverse
 from .models import EventCSV
 
+# class EventCSVAdmin(admin.ModelAdmin):
+#     list_display = ['file', 'uploaded_at', 'view_csv_link']
+
+#     def view_csv_link(self, obj):
+#         if obj.file:
+#             return format_html('<a href="{}" target="_blank">View CSV</a>', reverse('mainapp:admin_view_csv', args=[obj.id]))
+#         return '-'
+
+#     view_csv_link.allow_tags = True
+#     view_csv_link.short_description = 'View CSV'
+
+# admin.site.register(EventCSV, EventCSVAdmin)
+from django.contrib import admin
+from django.utils.html import format_html
+from django.urls import reverse
+from .models import EventCSV
+
 class EventCSVAdmin(admin.ModelAdmin):
-    list_display = ['file', 'uploaded_at', 'view_csv_link']
+    list_display = ['file', 'uploaded_at', 'view_csv_link', 'predict_link', 'train_model_link']
 
     def view_csv_link(self, obj):
         if obj.file:
@@ -62,5 +79,21 @@ class EventCSVAdmin(admin.ModelAdmin):
 
     view_csv_link.allow_tags = True
     view_csv_link.short_description = 'View CSV'
+
+    def predict_link(self, obj):
+        if obj.file:
+            return format_html('<a href="{}" target="_blank">Predict</a>', reverse('mainapp:predict_maintenance', args=[obj.id]))
+        return '-'
+
+    predict_link.allow_tags = True
+    predict_link.short_description = 'Predict Maintenance'
+
+    def train_model_link(self, obj):
+        if obj.file:
+            return format_html('<a href="{}" target="_blank">Train Model</a>', reverse('mainapp:train_model', args=[obj.id]))
+        return '-'
+
+    train_model_link.allow_tags = True
+    train_model_link.short_description = 'Train Model'
 
 admin.site.register(EventCSV, EventCSVAdmin)
