@@ -1,18 +1,25 @@
 
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
+import csv
 import os
+import joblib
+import pandas as pd
+import numpy as np
+import chardet
 from django.conf import settings
 from rest_framework import generics
 from .models import EventCSV
 from .serializers import EventCSVSerializer
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
-from .models import EventCSV
-import csv
 from collections import Counter
-
-
+from datetime import timedelta
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
 class EventCSVCreateView(generics.ListCreateAPIView):
     queryset = EventCSV.objects.all()
@@ -84,36 +91,19 @@ def view_csv_content(request, eventcsv_id):
 
 
 
-
-
-
-
-
-
-
-from django.shortcuts import render, get_object_or_404
-from .models import EventCSV
-import joblib
-import pandas as pd
-import numpy as np
-import os
-from datetime import timedelta
-
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.views import APIView
-
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-import joblib
-
-
-
 class TrainModelView(APIView):
     def get(self, request, pk):
         try:
             event_csv = EventCSV.objects.get(pk=pk)
-            df = pd.read_csv(event_csv.file.path)
+            
+            # Detect encoding
+            with open(event_csv.file.path, 'rb') as file:
+                raw_data = file.read()
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+
+            # Read the CSV with the detected encoding
+            df = pd.read_csv(event_csv.file.path, encoding=encoding)
 
             df_filtered = df[df['EventType'].isin(['Error', 'Warning'])]
             print("Filtered EventIDs:", df_filtered['EventID'].unique())
@@ -128,11 +118,23 @@ class TrainModelView(APIView):
 
                 # Optional: Handle class imbalance
                 model = RandomForestClassifier(class_weight='balanced')
-                model.fit(X, y)
 
+                # Split the data into training and testing sets
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+                
+                # Train the model
+                model.fit(X_train, y_train)
+
+                # Evaluate the model
+                accuracy = model.score(X_test, y_test)
+                print("Model accuracy:", accuracy)
+
+                # Save the model and accuracy
                 joblib.dump(model, f'models/model_{pk}.joblib')
+                with open(f'models/model_{pk}_accuracy.txt', 'w') as file:
+                    file.write(str(accuracy))
 
-                return Response({"message": "Model trained successfully"}, status=status.HTTP_200_OK)
+                return Response({"message": "Model trained successfully", "accuracy": accuracy}, status=status.HTTP_200_OK)
             else:
                 return Response({"error": "'EventType' not found in DataFrame or no data to train"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -141,7 +143,7 @@ class TrainModelView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        
+
 
 
 
@@ -153,7 +155,22 @@ def predict_maintenance(request, pk):
         return render(request, 'prediction_report.html', {'error': 'Model not found'})
 
     model = joblib.load(model_path)
-    df = pd.read_csv(event_csv.file.path)
+    
+    # Load accuracy
+    accuracy_path = f'models/model_{pk}_accuracy.txt'
+    if os.path.exists(accuracy_path):
+        with open(accuracy_path, 'r') as file:
+            accuracy = float(file.read())
+    else:
+        accuracy = None
+    
+    # Detect encoding
+    with open(event_csv.file.path, 'rb') as file:
+        raw_data = file.read()
+        result = chardet.detect(raw_data)
+        encoding = result['encoding']
+    
+    df = pd.read_csv(event_csv.file.path, encoding=encoding)
 
     # Filter for Error and Warning logs
     df_filtered = df[df['EventType'].isin(['Error', 'Warning'])]
@@ -218,4 +235,4 @@ def predict_maintenance(request, pk):
         Next_Occurrence=('Next_Occurrence', 'first')
     ).reset_index()
 
-    return render(request, 'prediction_report.html', {'report': report_grouped.to_dict(orient='records')})
+    return render(request, 'prediction_report.html', {'report': report_grouped.to_dict(orient='records'), 'accuracy': accuracy})
