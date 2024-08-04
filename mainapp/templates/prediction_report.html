@@ -9,7 +9,7 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.css">
     <!-- DataTables Buttons CSS -->
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css">
-    <!-- Chart.js CSS -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
@@ -30,6 +30,13 @@
             <div class="alert alert-danger">{{ error }}</div>
         {% else %}
             <p>Model Accuracy: {{ accuracy }}</p>
+            <p>Model F1 Score: {{ f1 }}</p>
+            
+            <div class="alert alert-info">
+                <h4>Data Usage Information:</h4>
+                <p>Training Period: {{ training_start }} to {{ training_end }}</p>
+                <p>Validation Period: {{ validation_start }} to {{ validation_end }}</p>
+            </div>
             
             <!-- Filter Dropdowns -->
             <div class="form-group">
@@ -46,14 +53,15 @@
                 <canvas id="eventChart"></canvas>
             </div>
 
+            <!-- DataTable -->
             <table id="predictionTable" class="display table table-striped table-bordered" style="width:100%">
                 <thead>
                     <tr>
                         <th>Date</th>
                         <th>EventID</th>
                         <th>EventType</th>
-                        <th>Predicted_Probability</th>
-                        <th>Next_Occurrence</th>
+                        <th>Predicted Probability (%)</th>
+                        <th>Next Occurrence</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -62,7 +70,7 @@
                             <td>{{ record.Date }}</td>
                             <td>{{ record.EventID }}</td>
                             <td>{{ record.EventType }}</td>
-                            <td>{{ record.Predicted_Probability }}</td>
+                            <td>{{ record.Predicted_Probability|floatformat:2 }}</td>
                             <td>{{ record.Next_Occurrence }}</td>
                         </tr>
                     {% endfor %}
@@ -74,8 +82,8 @@
     <script>
         $(document).ready(function() {
             var table = $('#predictionTable').DataTable({
-                "order": [[ 0, "desc" ]], // Order by Date column descending
-                dom: 'Bfrtip', // Show buttons
+                "order": [[ 4, "asc" ]], // Order by Next Occurrence column ascending
+                dom: 'Bfrtip',
                 buttons: [
                     {
                         extend: 'csvHtml5',
@@ -83,7 +91,7 @@
                         exportOptions: {
                             columns: ':visible',
                             modifier: {
-                                search: 'applied',  // Use the filtered data
+                                search: 'applied',
                                 order: 'applied'
                             }
                         }
@@ -91,44 +99,73 @@
                 ]
             });
 
-            // EventType filter
             $('#eventTypeFilter').on('change', function() {
                 var selected = $(this).val();
-                if (selected) {
-                    table.column(2).search('^' + selected + '$', true, false).draw();
-                } else {
-                    table.column(2).search('').draw();
-                }
+                table.column(2).search(selected ? '^' + selected + '$' : '', true, false).draw();
+                updateChart();
             });
 
-            // Prepare data for Chart.js
-            var eventTypeData = {
-                Error: table.column(2).data().filter(item => item === 'Error').length,
-                Warning: table.column(2).data().filter(item => item === 'Warning').length
+            // Parse the chart data
+            var chartData = JSON.parse('{{ chart_data|safe }}');
+
+            var chartOptions = {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Probability (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Next Occurrence Date'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Prediction vs Actual Data Timeline\nTraining: {{ training_start }} to {{ training_end }}\nValidation: {{ validation_start }} to {{ validation_end }}',
+                        font: {
+                            size: 14
+                        }
+                    }
+                }
             };
 
             // Initialize Chart.js
             var ctx = document.getElementById('eventChart').getContext('2d');
             var eventChart = new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: ['Error', 'Warning'],
-                    datasets: [{
-                        label: 'Event Count',
-                        data: [eventTypeData.Error, eventTypeData.Warning],
-                        backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)'],
-                        borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)'],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
+                data: chartData,
+                options: chartOptions
             });
+
+            function updateChart() {
+                var filteredData = table.rows({ search: 'applied' }).data().toArray();
+                var labels = [];
+                var errorData = [];
+                var warningData = [];
+
+                filteredData.forEach(function(row) {
+                    labels.push(row[4]); // Next Occurrence date
+                    if (row[2] === 'Error') {
+                        errorData.push(parseFloat(row[3]));
+                        warningData.push(0);
+                    } else {
+                        errorData.push(0);
+                        warningData.push(parseFloat(row[3]));
+                    }
+                });
+
+                eventChart.data.labels = labels;
+                eventChart.data.datasets[0].data = errorData;
+                eventChart.data.datasets[1].data = warningData;
+                eventChart.update();
+            }
         });
     </script>
 </body>
